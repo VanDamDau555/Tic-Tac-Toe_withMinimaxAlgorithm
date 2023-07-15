@@ -3,8 +3,9 @@ import random
 import sys
 import cv2
 import PIL.Image
+import math
 
-#pg.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)                 #De tich hop sound tot hon cho pygame
+pg.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)                 #De tich hop sound tot hon cho pygame
 pg.init()
 #Set screen frame
 screen_width = 468
@@ -16,12 +17,17 @@ pg.display.set_caption("Caro")
 #The image are used for when you play
 player_img = pg.image.load('D:\Anaconda\python1\CaroChess\X_turn.png')
 bot_img = pg.image.load('D:\Anaconda\python1\CaroChess\O_turn.png')
-
+#The sound are used
+hit_sound = pg.mixer.Sound('D:\Anaconda\python1\FlappyBird\Sound_FB\FB_sfx_hit.wav')
 clock = pg.time.Clock()  
 font_Game = pg.font.SysFont('Time new roman', 40, bold=True)
 
 blockSize = 156
 grid = ["-", "-", "-", "-", "-", "-", "-", "-", "-"]
+#Set up score for minimax algorithm
+scores = {'X':-10, 
+          'O':10, 
+          'T':0    }
 currentPlayer = 'X'
 winner = None
 active = True
@@ -36,7 +42,9 @@ def display(a):
     
 def checkTie(a):
     global active
+    global winner
     if "-" not in a and winner == None:
+        winner = 'T'
         active = False    
         #print("Tie")       Delete when use pygame to don't check Terminal
         return True
@@ -92,6 +100,35 @@ def checkWin(a):
         active = False
         return True
     return False
+
+def checkWinFuture():
+    #Vertical
+    count = 0
+    winFuture = None
+    for i in range(0, 3):
+        if grid[i*3] == grid[i*3+1] == grid[i*3+2] and grid[i*3]!="-":
+            winFuture = grid[i*3]
+    
+    #Horizon
+    for i in range(0, 3):
+        if grid[i] == grid[i+3] == grid[i+6] and grid[i]!="-":
+            winFuture = grid[i]
+    
+    #Diagonal
+    if grid[0] == grid[4] == grid[8] and grid[0] != "-":
+        winFuture = grid[0]
+    
+    if grid[2] == grid[4] == grid[6] and grid[2] != "-":
+        winFuture = grid[6]
+
+    for i in range(0, 9):
+        if grid[i] == "-":
+            count = count+1
+
+    if winFuture == None and count == 0:
+        return 'T'
+    else:
+        return winFuture
 #Try code with have Pygame
 def display2():
     for i in range(0, screen_width, blockSize):
@@ -105,7 +142,9 @@ def Player2(posX, posY):
         for i in range (0, screen_width, blockSize):
             for j in range (0, screen_height, blockSize):
                 if (posX > i) and (posX < i + blockSize) and (posY > j) and (posY < j + blockSize):
+                    # +2 to don't overprint with grid in display2 
                     screen.blit(player_img, (i+2, j+2))
+                    hit_sound.play()
                     switchPlayer()
                 
 
@@ -118,8 +157,61 @@ def Bot2():
         #print(posX, posY)
         if(grid[botPos] == "-" and grid[botPos]!="X"):
             grid[botPos] = currentPlayer
+            print(botPos)
+            # +2 to don't overprint with grid in display2
             screen.blit(bot_img, (posX*blockSize+2, posY*blockSize+2))
             switchPlayer()
+
+
+def Bot3_with_Minimax():
+    while currentPlayer == 'O' and active:
+        bestScore = -100 
+        pos = 0       
+        for i in range(0, len(grid)):
+            if grid[i] == "-":
+                grid[i] = currentPlayer                
+                score = Minimax(grid, 0, False)
+                grid[i] = "-"                
+                if(score > bestScore):
+                    bestScore = score
+                    pos = i
+                print(bestScore, i)    
+        grid[pos] = 'O'
+        posY = pos // (len(grid)/3)
+        posX = pos - posY*3
+        print(pos)
+        screen.blit(bot_img, (posX*blockSize+2, posY*blockSize+2))
+        switchPlayer()
+
+
+
+def Minimax(grid, depth, isMinimax):
+    result = checkWinFuture()
+    #result2 = tie    
+    if result != None:
+        return scores[result]
+
+    if isMinimax:
+        bestScore = -100
+        for i in range(0, len(grid)):
+            if grid[i] == "-":
+                grid[i] = 'O'
+                score = Minimax(grid, depth+1, False)
+                grid[i] = "-"
+                bestScore = max(score, bestScore)
+        return bestScore
+    elif isMinimax == False:        
+        bestScore = 100
+        for i in range(0, len(grid)):
+            if (grid[i] == "-"):
+                grid[i] = 'X'
+                score = Minimax(grid, depth+1, True)
+                grid[i] = "-"
+                bestScore = min(score, bestScore)
+        
+        return bestScore
+  
+
 
 def EndGame(gameRun):
     if gameRun == False:
@@ -130,7 +222,7 @@ def EndGame(gameRun):
         screen.blit(retry_display, retry_rect)
     #Case Tie    
     if checkTie(grid) == True and gameRun == False:     
-        tie_display = font_Game.render("Tie", True, (0, 255, 0))
+        tie_display = font_Game.render(winner, True, (0, 255, 0))
         tie_rect = tie_display.get_rect(center = (screen_width/2, 120))
         screen.blit(tie_display, tie_rect)
     #Case have win
@@ -143,9 +235,10 @@ def EndGame(gameRun):
 
 while gameRunning:
     if winner==None and active == True:
+        #print(Minimax(grid, 0, True))
         EndGame(gameRun=True)
-        display2()
-        Bot2()
+        
+        Bot3_with_Minimax()
         #display(grid)
         # Player(grid)
         checkWin(grid)
@@ -154,7 +247,6 @@ while gameRunning:
         # Bot(grid)
         # checkWin(grid)
         # checkTie(grid)
-        
 
     elif active == False:
         EndGame(gameRun=False)
